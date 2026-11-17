@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Inventory Tracker</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            padding: 1rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        h1 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #38bdf8;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            padding: 0.3rem 0.6rem;
+            border-radius: 99px;
+            font-weight: 600;
+        }
+
+        /* Stats Cards */
+        .stats-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background-color: #1e293b;
+            padding: 1rem;
+            border-radius: 10px;
+            border: 1px solid #334155;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 0.3rem;
+            color: #f8fafc;
+        }
+
+        /* Search Bar */
+        .search-box {
+            width: 100%;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            margin-bottom: 1.25rem;
+            outline: none;
+        }
+
+        .search-box:focus {
+            border-color: #38bdf8;
+        }
+
+        /* Mobile Feed List */
+        .item-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .item-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .item-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .item-product {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+
+        .item-tag {
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.1);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            width: fit-content;
+        }
+
+        .item-time {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-align: right;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #94a3b8;
+            background-color: #1e293b;
+            border-radius: 10px;
+            border: 1px solid #334155;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Inventory Scanner</h1>
+        <div class="status-badge" id="statusText">Live (5s)</div>
+    </header>
+
+    <!-- Quick Stats -->
+    <div class="stats-container">
+        <div class="stat-card">
+            <div class="stat-label">Total Scanned</div>
+            <div class="stat-value" id="totalScanned">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Unique Items</div>
+            <div class="stat-value" id="uniqueCount">0</div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <input type="text" id="searchInput" class="search-box" placeholder="Search product or tag ID..." onkeyup="renderInventory()">
+
+    <!-- List Feed -->
+    <div class="item-list" id="itemList">
+        <div class="empty-state">Loading inventory...</div>
+    </div>
+</div>
+
+<script>
+    const BIN_URL = "https://api.jsonbin.io/v3/b/6af90debffd5d16053c22acd/latest";
+    const API_KEY = "$2a$10$maLvoyo0VgmLHLKdgK1dvOZkvZ3aVdZReXJSBdf7NidE08ajvPeVK";
+    const REFRESH_MS = 5000;
+
+    let allLogs = [];
+
+    async function fetchInventory() {
+        try {
+            const res = await fetch(BIN_URL, {
+                headers: { "X-Master-Key": API_KEY }
+            });
+            if (!res.ok) throw new Error("Cloud fetch failed");
+            
+            const data = await res.json();
+            const logs = data.record && Array.isArray(data.record.logs) ? data.record.logs : [];
+            
+            // Newest scans first
+            allLogs = [...logs].reverse();
+            
+            updateUI();
+            document.getElementById("statusText").textContent = "Live (5s)";
+        } catch (err) {
+            console.error(err);
+            document.getElementById("statusText").textContent = "Sync Error";
+            document.getElementById("statusText").style.background = "rgba(239, 68, 68, 0.15)";
+            document.getElementById("statusText").style.color = "#f87171";
+        }
+    }
+
+    function formatTime(ts) {
+        if (!ts) return "";
+        if (ts < 100000000) return `Uptime: ${ts}s`;
+        const unix = ts < 1600000000 ? ts + 946684800 : ts;
+        return new Date(unix * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function updateUI() {
+        document.getElementById("totalScanned").textContent = allLogs.length;
+        const unique = new Set(allLogs.map(i => i.product)).size;
+        document.getElementById("uniqueCount").textContent = unique;
+        renderInventory();
+    }
+
+    function renderInventory() {
+        const listEl = document.getElementById("itemList");
+        const query = document.getElementById("searchInput").value.toLowerCase().trim();
+
+        const filtered = allLogs.filter(i => 
+            (i.product || "").toLowerCase().includes(query) || 
+            (i.tag || "").toLowerCase().includes(query)
+        );
+
+        if (filtered.length === 0) {
+            listEl.innerHTML = `<div class="empty-state">No items found.</div>`;
+            return;
+        }
+
+        listEl.innerHTML = filtered.map(item => `
+            <div class="item-card">
+                <div class="item-info">
+                    <span class="item-product">${item.product || "Unknown Component"}</span>
+                    <span class="item-tag">${item.tag || "N/A"}</span>
+                </div>
+                <div class="item-time">${formatTime(item.timestamp)}</div>
+            </div>
+        `).join("");
+    }
+
+    fetchInventory();
+    setInterval(fetchInventory, REFRESH_MS);
+</script>
+
+</body>
+</html>
